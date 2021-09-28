@@ -12,7 +12,7 @@ sudo systemctl disable x11vnc.service
 
 5) Reboot and verify that it boots to the command line, then run:
 
-sudo python cn504_production_test_TC.py
+sudo python cn504_production_test.py
 
 (This will complain if a DUT board is not connected)
 
