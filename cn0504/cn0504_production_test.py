@@ -33,32 +33,30 @@
 
 import sys
 import time
+import adi
 
 # Channel scale factors
-adc_scale = 0.000149011             # Vref=2.5; adc_scale=[2.5/(2^24)]
-ldoU2_temp_scale = 1.0              # Degrees C/mV
-ldoU3_temp_scale = 1.0              # Degrees C/mV
-iout_scale = 0.005                  # A/mV
-vin_scale =  14.33/1000             # V/mV; vin_scale = 1+(20.0/1.5)
-vout_scale =  10.52/1000            # V/mV; vout_sca;e = 1+(20.0/2.1)
-ilim_pos_scale =  100.0/(2.5*1000)  # Percent
-vpot_pos_scale =  100.0/(2.5*1000)  # Percent
-ldoin_scale =  14.33/1000           # V/mV; vin_scale = 1+(20.0/1.5)
+adc_scale = 0.000149011 #Vref=2.5; adc_scale=[2.5/(2^24)]
+ldoU2_temp_scale = 1.0 # Degrees C/mV
+ldoU3_temp_scale = 1.0 # Degrees C/mV
+iout_scale = 0.005 # A/mV
+vin_scale =  14.33/1000 # V/mV; vin_scale = 1/(21.5/1.5)
+vout_scale =  10.52/1000 # V/mV; vout_sca;e = 1/(22.1/2.1)
+ilim_pos_scale =  100.0/(2.5*1000) # Percent
+vpot_pos_scale =  100.0/(2.5*1000) # Percent
 
 def main(my_ip):
     try:
-        import adi
-        myadc = adi.ad7124(uri=my_ip)
-        mydac = adi.ad5686(uri=my_ip) # REMEMBER TO VERIFY POWERDOWN/UP BEHAVIOR
+        myadc = adi.ad7124(uri=my_ip, part="ad7124-4")
+        mydac = adi.ad5683r(uri=my_ip) # REMEMBER TO VERIFY POWERDOWN/UP BEHAVIOR
     except:
       print("No device found")
       sys.exit(0)
 
-    print("setting up DAC, setting output to 0.0V...")
-    dac_scale = mydac.channel[0].scale # This is set by the device tree, it's not an actual measured value.
+    print("setting up DAC, setting output to 2.5V...")
+    mydac.raw = '11000'#'5958' # Hardcoded value, dependent on CN0508 op-amp gain
+    dac_scale = mydac.scale # This is set by the device tree, it's not an actual measured value.
     print("DAC scale factor: " + str(dac_scale))
-    setpoint = 0.0
-    mydac.channel[0].raw = str(int(setpoint * 1000.0 / (11.0 *dac_scale)))
 
     print("Setting sample rates...")
     #Set maximum sampling frequency
@@ -70,51 +68,34 @@ def main(my_ip):
 
     print("Reading all voltages...\n\n")
 
-    # Read initial conditions
-    ldoU2_temp_init = (float(myadc.channel[0].raw) * adc_scale) * ldoU2_temp_scale
-    ldoU3_temp_init = (float(myadc.channel[1].raw) * adc_scale) * ldoU3_temp_scale
+    # Calculate parameters
+    # (Copy and paste below as needed...)
+    ldoU2_temp = (float(myadc.channel[0].raw) * adc_scale) * ldoU2_temp_scale
+    ldoU3_temp = (float(myadc.channel[1].raw) * adc_scale) * ldoU3_temp_scale
     iout = (float(myadc.channel[2].raw) * adc_scale) * iout_scale
     vin = (float(myadc.channel[3].raw) * adc_scale) * vin_scale
     vout = (float(myadc.channel[4].raw) * adc_scale) * vout_scale
     ilim_pos = (float(myadc.channel[5].raw) * adc_scale) * ilim_pos_scale
     vpot_pos = (float(myadc.channel[6].raw) * adc_scale) * vpot_pos_scale
-    vldoin = (float(myadc.channel[7].raw) * adc_scale) * ldoin_scale
+
+
 
     print("Initial Board conditions:")
-    print("U2 Temperature: " + str(ldoU2_temp_init) + " C")
-    print("U3 Temperature: " + str(ldoU3_temp_init) + " C")
+    print("U2 Temperature: " + str(ldoU2_temp) + " C")
+    print("U3 Temperature: " + str(ldoU3_temp) + " C")
     print("Output Current: " + str(iout) + " A")
     print("Input Voltage: " + str(vin) + " V")
     print("Output Voltage: " + str(vout) + " V")
     print("ILIM pot position: " + str(ilim_pos) + " %")
     print("Vout pot position: " + str(vpot_pos) + " %")
-    print("LDO input voltage: " + str(vldoin) + " %")
 
-    # Production test code
-    input("\n\nStarting Production Test! Verify nothing connected to output jacks, press enter to continue...")
+# Trisha, here is where to put the production test code.
+    print("\n\nStarting Production Test! Connect Fluke 87 or equivalent meter")
+    print("to output jacks. Do not connect any additional load")
     failed_tests = []
-    input("Set both potentiometers to 12:00 position, then press enter to continue...")
-
-    # Verify that potentiometer knobs are within 40% to 60% scale. This is not necessarily
-    # to test the pots, but to verify that they're in position for subsequent tests.
-    ilim_pos = (float(myadc.channel[5].raw) * adc_scale) * ilim_pos_scale
-    vpot_pos = (float(myadc.channel[6].raw) * adc_scale) * vpot_pos_scale
-    print("Vout pot position: %.3f," % (vpot_pos))
-    print("ILIM pot position: %.3f," % (ilim_pos))
-    if (40 < vpot_pos < 60):# and (40 < ilim_pos < 60):
-        print("Voltage Pot GOOD!\n")
-    else:
-        print("Voltage Pot position FAILS!")
-        failed_tests.append("Fails Voltage Pot Test")
-    if (40 < ilim_pos < 60):
-        print("Current Pot GOOD!\n")
-    else:
-        print("Voltage Pot position FAILS!")
-        failed_tests.append("Fails Current Pot Test")
-
     # Test zero output (verifies negative supply and current sink)
     setpoint = 0.0
-    mydac.channel[0].raw = str(int(setpoint * 1000.0 / (11.0 *dac_scale)))
+    mydac.raw = str(int(setpoint * 1000.0 / (11.0 *dac_scale)))
     time.sleep(0.1)
     vout = (float(myadc.channel[4].raw) * adc_scale) * vout_scale
     if (-0.01 < vout < 0.01):
@@ -123,82 +104,63 @@ def main(my_ip):
         print("Zero output voltage test FAILS!")
         failed_tests.append("Fails zero output test")
 
-    # Test DAC gain
-    setpoint = 10.0
-    mydac.channel[0].raw = str(int(setpoint * 1000.0 / (11.0 *dac_scale)))
-    time.sleep(0.1)
-    vout = (float(myadc.channel[4].raw) * adc_scale) * vout_scale
-    print("10V output voltage: %.3f" % (vout))
-    if (9.9 < vout < 10.1):
-        print("10V output voltage test PASSES!")
-    else:
-        print("10V output voltage test FAILS!")
-        failed_tests.append("Fails 10V output test")
-
-    # Test AND circuitry (verifies output voltage of the board is the lower between DAC and Vpot)
+    # Prompt user to Set both potentiometers to 50% scale.
+    # Set output voltage to 18V by writing to the DAC
+    # Verify potentiometer positions are actually between 40% and 60% (okay
+    # to have a wide tolerance on this...
+    # Verify output voltage is LESS THAN 16V. This verifies that precision diode
+    # OR circuit is operating correctly.
+    input("\nSet both potentiometers to 3:45 position, then press enter to continue...")
     setpoint = 18.0
-    mydac.channel[0].raw = str(int(setpoint * 1000.0 / (11.0 *dac_scale)))
+    mydac.raw = str(int(setpoint * 1000.0 / (11.0 *dac_scale)))
     time.sleep(0.1)
+
+    ilim_pos = (float(myadc.channel[5].raw) * adc_scale) * ilim_pos_scale
+    vpot_pos = (float(myadc.channel[6].raw) * adc_scale) * vpot_pos_scale
+    while (ilim_pos < 40) or (ilim_pos >60) or (vpot_pos <40) or (vpot_pos > 60):
+        print("Pot positions fail!")
+        print("Ilim pot position: " + str(ilim_pos) + " %")
+        print("Vout pot position: " + str(vpot_pos) + " %")
+        input("\nSet both potentiometers to 3:45 position, then press enter to continue...")
+        time.sleep(0.1)
+        ilim_pos = (float(myadc.channel[5].raw) * adc_scale) * ilim_pos_scale
+        vpot_pos = (float(myadc.channel[6].raw) * adc_scale) * vpot_pos_scale
+    else:
+        print("Ilim pot position: " + str(ilim_pos) + " %, ILIM POT PASS!")
+        print("Vout pot position: " + str(vpot_pos) + " %, Vout POT PASS!")
+    
     vout = (float(myadc.channel[4].raw) * adc_scale) * vout_scale
-    print("Testing analog AND. Output voltage: %.3f" % (vout))
-    if (12.0 < vout < 15):
-        print("Output between 12V and 15V, test PASSES!")
+    if (vout < 16):
+        print("Output voltage: %.3f, test PASSES!" % (vout))
     else:
-        print("AND circuit output voltage test FAILS!")
-        failed_tests.append("Fails AND circuit output voltage test")
+        print("Precision diode OR circuitry FAILS!")
+        failed_tests.append("Fails OR circuit test")
 
-    # Test LDO preregulation
-    vldoin = (float(myadc.channel[7].raw) * adc_scale) * ldoin_scale
-    vdrop = vldoin - vout
-    print("LDO input voltage: %.3f (%3f drop)" % (vldoin, vdrop))
-    if(1.5 < vdrop < 2.0):
-        print("LDO Preregulation PASSES!")
-    else:
-        print("LDO Preregulation FAILS")
-        failed_tests.append("Fails LDO preregulation")
+    # (implement test here...)
 
-    print("\nConnect a 4-ohm, 50W power resistor between output terminals,")
-    input("then press enter to continue...")
-    time.sleep(1)
+    # Prompt user to connect 4-ohm, 50W resistor ON A HEAT SINK to output.
+    # The output will go into current limit of about 1.5A, and the LDOs will
+    # start to heat up.
+    # Insert 5 second delay.
+    # Verify output current between 1A and 2A (we'll determine exact limits as
+    # we gain experience.)
+    # Verify BOTH LDO temperatures are greater than 60C (we may have to adjust this limit)
+    # (implement test here...)
+
+    input("\nConnect a 4-ohm, 50W resistor ON A HEAT SINK to output of the board, then press enter to continue...")
+    time.sleep(5)
     iout = (float(myadc.channel[2].raw) * adc_scale) * iout_scale
-    if (1.6 < iout < 2.1):
-        print("midscale current limit: %.3f, test PASSES!\n" % (iout))
+    if (1 < iout < 2):
+        print("Current limit test PASS!")
     else:
-        print("midscale urrent limit test FAILS\n")
-        failed_tests.append("Fails mid-current limit test")
-
-    input("Set current limit potentiometer fully clockwise (5:00 position)")
-
-    iout = (float(myadc.channel[2].raw) * adc_scale) * iout_scale
-    if (2.6 < iout < 3.1):
-        print("Current limit: %.3f, test PASSES!\n" % (iout))
-    else:
-        print("Current limit test FAILS\n")
+        print("Current limit test FAILS")
         failed_tests.append("Fails current limit test")
 
-
-    print("LDO Temp test...")
-    time.sleep(7)
-    ldoU2_temp = (float(myadc.channel[0].raw) * adc_scale) * ldoU2_temp_scale
-    ldoU3_temp = (float(myadc.channel[1].raw) * adc_scale) * ldoU3_temp_scale
-    tempdiff = abs(ldoU2_temp - ldoU3_temp)
-    print("U2 Temperature: " + str(ldoU2_temp) + " C")
-    print("U3 Temperature: " + str(ldoU3_temp) + " C")
-
-    if((50 < ldoU2_temp < 80) and (50 < ldoU3_temp < 80) and tempdiff < 12.0):
-        print("LDO temp test PASS!")
-    else:
-        print("LDO temp test FAILS")
-        failed_tests.append("Fails LDO temp test")
-
-    print("\nSetting DAC output to zero, just to be safe...\n\n")
-    mydac.channel[0].raw = "0"
-    time.sleep(1)
+    print("Setting DAC output to zero, just to be safe...\n\n")
+    mydac.raw = "0"
 
     del myadc
     del mydac
-    del adi
-
     if len(failed_tests) == 0:
         print("Board PASSES!!")
     else:
@@ -207,24 +169,10 @@ def main(my_ip):
             print(failure)
         print("Note failures and set aside for debug.")
 
+
 if __name__ == '__main__':
-    import os
-    from time import sleep
-    hardcoded_ip = 'ip:localhost'
+    hardcoded_ip = 'ip:10.116.171.65' #118
     my_ip = sys.argv[1] if len(sys.argv) >= 2 else hardcoded_ip
     print("Connecting with CN0504 context at %s" % (my_ip))
 
-    while(1):
-        testdata = main(my_ip)
-        x = input("Type \'s\' to shut down, \'a\' to test again, or \'q\'to quit:  ")
-        if(x == 's'):
-            if os.name == "posix":
-                os.system("shutdown -h now")
-            else:
-                print("Sorry, can only shut down system when running locally on Raspberry Pi")
-            break
-        elif(x == 'q'):
-            break
-        else:
-            sleep(0.5)
-        # any other character tests again.
+    testdata = main(my_ip)
